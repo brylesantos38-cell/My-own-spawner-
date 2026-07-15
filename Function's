@@ -1,0 +1,163 @@
+--[[
+    Imrippah Utility Library
+    Modified & Optimized by: @HelloImrippah
+    
+    A clean, production-ready utility module designed for performance, 
+    robust error-handling, and safety across various exploit environments.
+--]]
+
+local MarketplaceService = game:GetService("MarketplaceService")
+local HttpService = game:GetService("HttpService")
+
+-- Environment Feature Detection
+local env = {
+    getgenv = (typeof(getgenv) == "function" and getgenv) or nil,
+    getcustomasset = (typeof(getcustomasset) == "function" and getcustomasset) or nil,
+    writefile = (typeof(writefile) == "function" and writefile) or nil,
+    readfile = (typeof(readfile) == "function" and readfile) or nil,
+    isfile = (typeof(isfile) == "function" and isfile) or nil,
+    delfile = (typeof(delfile) == "function" and delfile) or nil,
+}
+
+local ImrippahUtils = {}
+
+-- \\ Private Helpers // --
+
+local function timestampToMillis(timestamp: string | number | DateTime): number?
+    if typeof(timestamp) == "number" then
+        return timestamp
+    elseif typeof(timestamp) == "string" then
+        local dt = DateTime.fromIsoDate(timestamp)
+        return dt and dt.UnixTimestampMillis
+    elseif typeof(timestamp) == "DateTime" then
+        return timestamp.UnixTimestampMillis
+    end
+    return nil
+end
+
+-- \\ API // --
+
+-- Executes code from a local file, web URL, or raw string source safely
+function ImrippahUtils.Require(source: string): any
+    local content: string = source
+
+    if source:lower():sub(1, 4) == "http" then
+        content = game:HttpGet(source)
+    elseif env.isfile and env.readfile and env.isfile(source) then
+        content = env.readfile(source)
+    end
+
+    local func, err = loadstring(content)
+    if not func then
+        error(string.format("[ImrippahUtils.Require] Failed to compile source:\nTarget: %s\nError: %s", source, tostring(err)), 2)
+    end
+
+    return func()
+end
+
+-- Safely caches and loads a web/local asset using getcustomasset
+function ImrippahUtils.LoadCustomAsset(url: string): string
+    if env.getcustomasset then
+        if url:lower():sub(1, 4) == "http" then
+            if not (env.writefile and env.delfile and env.isfile) then
+                error("[ImrippahUtils.LoadCustomAsset] File system functions are missing in this environment.", 2)
+            end
+
+            local tempName = string.format("temp_%d_%d.txt", os.time(), math.random(1000, 9999))
+            local success, asset = pcall(function()
+                env.writefile(tempName, game:HttpGet(url))
+                return env.getcustomasset(tempName, true)
+            end)
+
+            if env.isfile(tempName) then
+                env.delfile(tempName)
+            end
+
+            if success and asset then
+                return asset
+            end
+        elseif env.isfile(url) then
+            return env.getcustomasset(url, true)
+        end
+    else
+        warn("[ImrippahUtils.LoadCustomAsset] 'getcustomasset' is unsupported. Falling back to rbxassetid.")
+    end
+
+    local numericId = url:match("%d+")
+    if url:find("rbxassetid") or numericId then
+        return "rbxassetid://" .. numericId
+    end
+
+    error(string.format("[ImrippahUtils.LoadCustomAsset] Failed to resolve asset for:\n%s", url), 2)
+end
+
+-- Downloads and generates an Instance from an asset path or URL
+function ImrippahUtils.LoadCustomInstance(url: string): Instance?
+    local assetPath = ImrippahUtils.LoadCustomAsset(url)
+    local success, result = pcall(function()
+        return game:GetObjects(assetPath)[1]
+    end)
+    return success and result or nil
+end
+
+-- Gets the last update time of the current game Place
+function ImrippahUtils.GetGameLastUpdate(): DateTime
+    local success, info = pcall(MarketplaceService.GetProductInfo, MarketplaceService, game.PlaceId)
+    if not success or not info then
+        error("[ImrippahUtils.GetGameLastUpdate] Failed to retrieve ProductInfo.", 2)
+    end
+    return DateTime.fromIsoDate(info.Updated)
+end
+
+-- Checks if the game has updated since the provided timestamp
+function ImrippahUtils.HasGameUpdated(timestamp: string | number | DateTime): boolean
+    local targetMillis = timestampToMillis(timestamp)
+    if targetMillis then
+        return targetMillis < ImrippahUtils.GetGameLastUpdate().UnixTimestampMillis
+    end
+    return false
+end
+
+-- Retrieves the last commit date for a specific file inside a GitHub repository
+function ImrippahUtils.GetGitLastUpdate(owner: string, repo: string, filePath: string): DateTime
+    local url = string.format("https://api.github.com/repos/%s/%s/commits?per_page=1&path=%s", owner, repo, filePath)
+    
+    local httpSuccess, response = pcall(game.HttpGet, game, url)
+    if not httpSuccess or not response then
+        error(string.format("[ImrippahUtils.GetGitLastUpdate] HTTP Request failed for:\n%s", url), 2)
+    end
+
+    local decodeSuccess, decoded = pcall(HttpService.JSONDecode, HttpService, response)
+    if not decodeSuccess or type(decoded) ~= "table" or not decoded[1] or not decoded[1].commit then
+        error(string.format("[ImrippahUtils.GetGitLastUpdate] Failed to parse JSON response for:\n%s", url), 2)
+    end
+
+    return DateTime.fromIsoDate(decoded[1].commit.committer.date)
+end
+
+-- Checks if a GitHub file has been updated since the provided timestamp
+function ImrippahUtils.HasGitUpdated(owner: string, repo: string, filePath: string, timestamp: string | number | DateTime): boolean
+    local targetMillis = timestampToMillis(timestamp)
+    if targetMillis then
+        return targetMillis < ImrippahUtils.GetGitLastUpdate(owner, repo, filePath).UnixTimestampMillis
+    end
+    return false
+end
+
+-- Truncates a number to a specified decimal precision
+function ImrippahUtils.TruncateNumber(num: number, decimals: number?): number
+    local factor = 10 ^ (decimals and math.max(decimals, 0) or 0)
+    return math.floor(num * factor) / factor
+end
+
+-- Inject functions into the global executor environment safely
+if env.getgenv then
+    local globalEnv = env.getgenv()
+    for name, func in pairs(ImrippahUtils) do
+        if typeof(func) == "function" then
+            globalEnv[name] = func
+        end
+    end
+end
+
+return ImrippahUtils
