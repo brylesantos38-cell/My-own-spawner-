@@ -1,0 +1,101 @@
+--[[
+    █▀▀█ ░▀░ █▀▀█ █▀▀█ █▀▀█ █░░█   █▀▀ █▀▀█ █▀▀█ █░░█ █▀▀▄ █▀▀ █▀▀█ 
+    █▄▄▀ ▀█▀ █░░█ █░░█ █▄▄█ █▀▀█   ▀▀█ █░░█ █▄▄█ ░▀▀▀ █░░█ █▀▀ █▄▄▀ 
+    ▀░▀▀ ▀▀▀ █▀▀▀ █▀▀▀ ▀░░▀ ▀░░▀   ▀▀▀ █▀▀▀ ▀░░▀ ░▀▀▀ ▀░░▀ ▀▀▀ ▀░▀▀ 
+
+         Rippah Spawner V2 — Custom Generation Template
+]]--
+
+---====== Load Spawner ======---
+local Spawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/brylesantos38-cell/My-own-spawner-/refs/heads/main/DOORS-ENTITY-SPAWNER-CUSTOM"))()
+
+---====== Create Entity ======---
+local MyEntity = Spawner:Create({
+	Entity = {
+		Name = "Template Entity",
+		Asset = "https://github.com/RegularVynixu/Utilities/blob/main/DOORS%20Entity%20Spawner/Models/Rush.rbxm?raw=true",
+		HeightOffset = 0,
+		
+		-- 2D Image options integrated from the spawner upgrade:
+		Is2D = false,                          -- Set to true if spawning a 2D Decal instead of a 3D Model
+		ImageId = "rbxassetid://134346506410955", -- Put your custom image ID here if Is2D is true
+		ImageSize = Vector3.new(5, 5, 0.2)      -- Dimensions of the 2D plane
+	},
+	Movement = {
+		Speed = 100,
+		Delay = 2,
+		Reversed = false
+	},
+	Damage = {
+		Enabled = true,
+		IgnoreHiding = false,
+		Range = 40,
+		Amount = 125
+	},
+	Rebounding = {
+		Enabled = true,
+		Type = "Ambush", -- "Blitz"
+		Min = 2,
+		Max = 4,
+		Delay = 2
+	},
+	Lights = {
+		Flicker = {
+			Enabled = true,
+			Duration = 1
+		},
+		Shatter = true,
+		Repair = false
+	},
+	Earthquake = {
+		Enabled = true
+	},
+	CameraShake = {
+		Enabled = true,
+		Values = {1.5, 20, 0.1, 1}, -- Magnitude, Roughness, FadeIn, FadeOut
+		Range = 100
+	},
+	Crucifixion = {
+		Type = "Curious", -- "Guiding"
+		Enabled = true,
+		Range = 40,
+		Resist = false,
+		Break = true
+	},
+	Death = {
+		Type = "Guiding", -- "Curious"
+		Hints = {"Death", "Hints", "Go", "Here"},
+		Cause = ""
+	}
+})
+
+---====== Debug Callbacks ======---
+
+MyEntity:SetCallback("OnSpawned", function()
+	print("MyEntity has successfully spawned!")
+end)
+
+MyEntity:SetCallback("OnStartMoving", function()
+	print("MyEntity is now moving through the rooms.")
+end)
+
+MyEntity:SetCallback("OnEnterRoom", function(room, firstTime)
+	if firstTime then
+		print("MyEntity entered room: " .. room.Name)
+	end
+end)
+
+MyEntity:SetCallback("OnDamagePlayer", function(newHealth)
+	if newHealth <= 0 then
+		print("MyEntity killed the player.")
+	else
+		print("MyEntity damaged the player. Player health is now: " .. tostring(newHealth))
+	end
+end)
+
+MyEntity:SetCallback("OnDespawned", function()
+	print("MyEntity has finished executing and despawned.")
+end)
+
+---====== Run Entity ======---
+MyEntity:Run(true)
