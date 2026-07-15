@@ -1,3 +1,275 @@
+--[[
+    █▀▀█ ░▀░ █▀▀█ █▀▀█ █▀▀█ █░░█   █▀▀ █▀▀█ █▀▀█ █░░█ █▀▀▄ █▀▀ █▀▀█ 
+    █▄▄▀ ▀█▀ █░░█ █░░█ █▄▄█ █▀▀█   ▀▀█ █░░█ █▄▄█ █░░█ █░░█ █▀▀ █▄▄▀ 
+    ▀░▀▀ ▀▀▀ █▀▀▀ █▀▀▀ ▀░░▀ ▀░░▀   ▀▀▀ █▀▀▀ ▀░░▀ ░▀▀▀ ▀░░▀ ▀▀▀ ▀░▀▀ 
+
+         Rippah Spawner V2 — Modified & Optimized for @HelloImrippah
+         Main: https://raw.githubusercontent.com/brylesantos38-cell/My-own-spawner-/refs/heads/main/Main%20Rippah%20Spawner
+]]--
+
+if getgenv().RippahSpawner then return getgenv().RippahSpawner end
+
+-- \\ External Dependencies // --
+pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/brylesantos38-cell/My-own-spawner-/refs/heads/main/Function's"))()
+end)
+
+-- \\ Services // --
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+-- \\ Optimizations & Micro-performance Aliases // --
+local math_clamp = math.clamp
+local math_random = math.random
+local math_max = math.max
+local table_insert = table.insert
+local table_sort = table.sort
+local table_find = table.find
+local table_remove = table.remove
+local task_spawn = task.spawn
+local task_wait = task.wait
+local task_delay = task.delay
+local string_format = string.format
+
+-- \\ Variables // --
+local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character.PrimaryPart or Character:FindFirstChildWhichIsA("BasePart", true)
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = workspace.CurrentCamera
+local Remotes = ReplicatedStorage:WaitForChild("RemotesFolder") :: Folder
+local GameStats = ReplicatedStorage:WaitForChild("GameStats") :: Folder
+local CurrentRooms = workspace:WaitForChild("CurrentRooms") :: Folder
+
+-- Cache RaycastParams to avoid high-frequency garbage collection (GC) pressure
+local roomRaycastParams = RaycastParams.new()
+roomRaycastParams.FilterType = Enum.RaycastFilterType.Include
+roomRaycastParams.CollisionGroup = "BaseCheck"
+local damageRaycastParams = RaycastParams.new()
+damageRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+-- Safe Globals
+local LastRespawn = os.clock()
+
+-- \\ Asset Resolution // --
+local LoadCustomInstance = getgenv().LoadCustomInstance or function(url)
+    warn("[Rippah Spawner] LoadCustomInstance is missing! Ensure external function loaders compiled correctly.")
+    return nil
+end
+
+local Assets = {
+	Repentance = LoadCustomInstance(ROOT.."/Assets/Repentance.rbxm"),
+	Earthquake = LoadCustomInstance(ROOT.."/Assets/Earthquake.rbxm")
+}
+
+local Modules = {
+	Module_Events = require(ReplicatedStorage.ModulesClient.Module_Events :: ModuleScript),
+	Main_Game = require(PlayerGui.MainUI.Initiator.Main_Game :: ModuleScript)
+}
+
+local Storage = {
+    Ambient = {},
+	DeathTypes = {
+		["Yellow"] = {"yellow", "curious"},
+		["Blue"] = {"blue", "guiding"}
+	}
+}
+
+local CONST = {
+	BASE_ENTITY_SPEED = 65,
+	ATTR = {
+		ENTITY = {
+			Running = false,
+			CustomEntity = true,
+			Paused = false,
+			BeingBanished = false,
+			Despawning = false,
+			Damage = true,
+			LastEnteredRoom = -1
+		},
+		PLAYER = {
+			SpawnProtection = 5
+		}
+	},
+	DEFAULT = {
+		CONFIG = {
+			Entity = {
+				Name = "Template Entity",
+				Asset = "https://github.com/RegularVynixu/Utilities/raw/refs/heads/main/Doors/Entity%20Spawner/Assets/Entities/Rush.rbxm",
+				HeightOffset = 0,
+				Is2D = false,        -- Toggle true if you want to spawn a 2D image/decal entity
+				ImageId = "",        -- Asset ID of your 2D decal (e.g. "rbxassetid://123456" or just the raw ID string)
+				ImageSize = Vector3.new(5, 5, 0.2) -- Size dimensions of the 2D plane
+			},
+			Movement = {
+				Speed = 100,
+				Delay = 2,
+				Reversed = false
+			},
+			Damage = {
+				Enabled = true,
+				Range = 40,
+				Amount = 125,
+                IgnoreHiding = false
+			},
+			Rebounding = {
+				Enabled = true,
+				Type = "Ambush", -- "Blitz"
+				Min = 2,
+				Max = 4,
+				Delay = 2
+			},
+			Lights = {
+				Flicker = {
+					Enabled = true,
+					Duration = 1
+				},
+				Shatter = true,
+				Repair = false
+			},
+			Earthquake = {
+				Enabled = true
+			},
+			CameraShake = {
+				Enabled = true,
+				Values = {1.5, 20, 0.1, 1}, -- Magnitude, Roughness, FadeIn, FadeOut
+				Range = 100
+			},
+			Crucifixion = {
+				Type = "Curious", -- "Guiding"
+				Enabled = true,
+				Range = 40,
+				Resist = false,
+				Break = true
+			},
+			Death = {
+				Type = "Guiding", -- "Curious"
+				Hints = {"Death", "Hints", "Go", "Here"},
+				Cause = ""
+			}
+		},
+		DEBUG = {
+			OnSpawned = function() end,
+			OnStartMoving = function() end,
+			OnReachedNode = function() end,
+			OnEnterRoom = function() end,
+			OnLookAt = function() end,
+			OnRebounding = function() end,
+			OnDespawning = function() end,
+			OnDespawned = function() end,
+			OnDamagePlayer = function() end,
+			CrucifixionOverwrite = nil
+		}
+	}
+}
+
+local Module = {
+    ActiveEntities = {}
+}
+
+-- \\ Helper Functions // --
+local function CloneTable<T>(tbl: T): T
+    if type(tbl) ~= "table" then return tbl end
+    local copy = {}
+    for k, v in pairs(tbl :: any) do
+        copy[k] = (type(v) == "table") and CloneTable(v) or v
+    end
+    return copy :: any
+end
+
+local function ApplyConfigDefaults(tbl: {}, defaults: {}): {}
+    local new = CloneTable(tbl)
+    for key, value in pairs(defaults) do
+        if new[key] == nil then
+            new[key] = (type(value) == "table") and CloneTable(value) or value
+        elseif type(value) == "table" then
+            if type(new[key]) ~= "table" then
+                new[key] = {}
+            end
+            new[key] = ApplyConfigDefaults(new[key], value)
+        end
+    end
+    return new
+end
+
+-- Generates or resolves the entity base model (handling 3D vs 2D automatically)
+local function ResolveEntityModel(config: any): Model?
+	local entConfig = config.Entity
+	if entConfig.Is2D then
+		local model = Instance.new("Model")
+		model.Name = entConfig.Name or "2D_Entity"
+
+		local root = Instance.new("Part")
+		root.Name = "Root"
+		root.Size = entConfig.ImageSize or Vector3.new(5, 5, 0.2)
+		root.Transparency = 1
+		root.CanCollide = false
+		root.Anchored = true
+		root.Parent = model
+		model.PrimaryPart = root
+
+		local formattedId = tostring(entConfig.ImageId)
+		if not string.match(formattedId, "://") then
+			formattedId = "rbxassetid://" .. formattedId
+		end
+
+		-- Create standard front decal
+		local frontDecal = Instance.new("Decal")
+		frontDecal.Name = "FrontDecal"
+		frontDecal.Face = Enum.NormalId.Front
+		frontDecal.Texture = formattedId
+		frontDecal.Parent = root
+
+		-- Create standard back decal so it is visible from behind
+		local backDecal = Instance.new("Decal")
+		backDecal.Name = "BackDecal"
+		backDecal.Face = Enum.NormalId.Back
+		backDecal.Texture = formattedId
+		backDecal.Parent = root
+
+		return model
+	else
+		return LoadCustomInstance(entConfig.Asset)
+	end
+end
+
+local function OnCharacterAdded(char: Model)
+	LastRespawn = os.clock()
+	Character = char
+	Humanoid = char:WaitForChild("Humanoid")
+    RootPart = char.PrimaryPart or char:FindFirstChildWhichIsA("BasePart")
+    Modules.Main_Game = require(PlayerGui:WaitForChild("MainUI").Initiator.Main_Game :: ModuleScript)
+end
+
+local function GetCurrentRoom(latest: boolean): Model?
+    if latest then
+        return CurrentRooms:GetChildren()[#CurrentRooms:GetChildren()]
+    end
+    return CurrentRooms:FindFirstChild(LocalPlayer:GetAttribute("CurrentRoom"))
+end
+
+local function GetRoomAtPoint(vector3: Vector3): Model?
+	local whitelist = {}
+	for _, room in ipairs(CurrentRooms:GetChildren()) do
+		local p = room:FindFirstChild(room.Name)
+		if p then
+			table_insert(whitelist, p)
+		end
+	end
+	if #whitelist > 0 then
+		roomRaycastParams.FilterDescendantsInstances = whitelist
+		local result = workspace:Raycast(vector3, Vector3.new(0, -100, 0), roomRaycastParams)
+		if result then
+			for _, room in ipairs(CurrentRooms:GetChildren()) do
+				if result.Instance.Parent == room then
+					return room
+				end
+			end
 		end
 	end
 	return nil
