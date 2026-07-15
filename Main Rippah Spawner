@@ -1,0 +1,147 @@
+--[[
+ _____  _                     _       _____                                            
+|  __ \(_)                   | |     / ____|                                           
+| |__) |_ _ __  _ __   __ _  | |__  | (___  _ __   __ ___      ___ __   ___ _ __       
+|  _  /| | '_ \| '_ \ / _` | | '_ \  \___ \| '_ \ / _` \ \ /\ / / '_ \ / _ \ '__|      
+| | \ \| | |_) | |_) | (_| | | | | | ____) | |_) | (_| |\ V  V /| | | |  __/ |         
+
+| _ | \_\_ | .__/ | .__/ \__,_ |  | _ |  | _ |  | _____/ | .__/ \__,_ | \_/\_/ | _ |  | _ | \___ | _ |
+| :--- | :--- | :--- | :--- | :--- |
+| _ |  | _ |  | _ |
+
+       Rippah Spawner V2 — Main Execution Script | Created for @HelloImrippah
+]]--
+-- 1. Load the Spawner Library
+-- (If you host your modified module on GitHub, replace the URL below with your raw GitHub link!)
+local RippahSpawner = getgenv().RippahSpawner
+if not RippahSpawner then
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/brylesantos38-cell/My-own-spawner-/refs/heads/main/Function's"))()
+    end)
+    if not success or not getgenv().RippahSpawner then
+        error("[Rippah Spawner - Main] Failed to initialize the spawner core module. Details: " .. tostring(result))
+    end
+    RippahSpawner = getgenv().RippahSpawner
+end
+-- 2. Define your Custom Entity Config
+local MyCustomEntityConfig = {
+    Entity = {
+        Name = "Rippah Rush", -- Name of the entity model inside workspace
+        Asset = "https://github.com/RegularVynixu/Utilities/raw/refs/heads/main/Doors/Entity%20Spawner/Assets/Entities/Rush.rbxm", -- Put your custom .rbxm link or pass a direct Instance
+        HeightOffset = 0 -- Adjust height alignment if your model floats or sinks
+    },
+    Movement = {
+        Speed = 120, -- Default base is 65. 100-150 is ideal for Rush/Ambush.
+        Delay = 2.5, -- Waiting time (seconds) before the entity begins moving after spawning
+        Reversed = false -- Set to true if you want the entity to run from the end room to the start room
+    },
+    Damage = {
+        Enabled = true,
+        Range = 40,
+        Amount = 125, -- Deals fatal damage (Default player MaxHealth is 100)
+        IgnoreHiding = false -- Set to true if you want the entity to kill players even inside closets/beds
+    },
+    Rebounding = {
+        Enabled = false, -- Toggle rebound behavior
+        Type = "Ambush", -- Rebounding logic styles: "Ambush" or "Blitz"
+        Min = 2, -- Minimum number of rebounds
+        Max = 4, -- Maximum number of rebounds
+        Delay = 2 -- Pause duration before rebounding back
+    },
+    Lights = {
+        Flicker = {
+            Enabled = true,
+            Duration = 1.5 -- Total length of the light flicker sequence on spawn
+        },
+        Shatter = true, -- Shatter room lights when passing through
+        Repair = false -- Set to true if you want the entity to fix broken lights instead of breaking them
+    },
+    Earthquake = {
+        Enabled = true -- Toggles screen shake/ceiling dust particles when entity spawns
+    },
+    CameraShake = {
+        Enabled = true,
+        Values = {2.0, 25, 0.1, 1}, -- {Magnitude, Roughness, FadeIn, FadeOut}
+        Range = 120 -- Distance from player to trigger camera shake
+    },
+    Crucifixion = {
+        Enabled = true,
+        Type = "Curious", -- Stylizes pentagram: "Curious" (Yellow) or "Guiding" (Blue)
+        Range = 45, -- Distance required to trigger the Crucifix arrest
+        Resist = false, -- If true, the entity will break free from the Crucifix after a struggle
+        Break = true
+    },
+    Death = {
+        Type = "Guiding", -- Color/sound theme of the Guiding Light: "Guiding" (Blue) or "Curious" (Yellow)
+        Hints = {
+            "You died to Rippah...",
+            "He is incredibly fast and breaks through light structures.",
+            "When you hear him coming, hide in a nearby closet immediately!",
+            "Do not come out until the roaring has completely faded."
+        },
+        Cause = "Rippah" -- Name displayed in your run statistics profile / lobby summary
+    }
+}
+-- 3. Construct and Initialize your Entity Object
+local Entity = RippahSpawner:Create(MyCustomEntityConfig)
+if not Entity then
+    warn("[Rippah Spawner - Main] An error occurred while constructing the entity configuration.")
+    return
+end
+-- ==============================================================================
+-- 4. Set Up Custom Callbacks (Event Hooks)
+-- ==============================================================================
+-- Triggers immediately when the entity spawns in the map
+Entity:SetCallback("OnSpawned", function()
+    print("[Rippah Spawner] " .. MyCustomEntityConfig.Entity.Name .. " has successfully entered the hotel!")
+    -- Place custom spawn audio, screen flashes, or global system announcements here:
+    -- local spawnSound = Instance.new("Sound", workspace) ...
+end)
+-- Triggers when the entity finishes its delay countdown and starts rushing through rooms
+Entity:SetCallback("OnStartMoving", function()
+    print("[Rippah Spawner] " .. MyCustomEntityConfig.Entity.Name .. " has begun its run!")
+end)
+-- Triggers every time the entity enters a new room
+Entity:SetCallback("OnEnterRoom", function(roomModel, isFirstTime)
+    local roomNumber = roomModel.Name
+    print("[Rippah Spawner] Entity entered Room " .. tostring(roomNumber) .. " (First time: " .. tostring(isFirstTime) .. ")")
+end)
+-- Triggers every time the entity touches a path node
+Entity:SetCallback("OnReachNode", function(node)
+    -- Highly optimized for custom node actions (e.g., tracking current position)
+end)
+-- Triggers whenever the player is looking directly at the entity
+Entity:SetCallback("OnLookAt", function(inSight)
+    -- Can be used to trigger custom static effects or hallucination scripts on the screen
+end)
+-- Triggers when the entity begins a rebound lap
+Entity:SetCallback("OnRebounding", function(isStartingRebound)
+    if isStartingRebound then
+        print("[Rippah Spawner] Warning: Entity is returning!")
+    else
+        print("[Rippah Spawner] Entity finished rebound loop.")
+    end
+end)
+-- Triggers when the entity damages a player
+Entity:SetCallback("OnDamagePlayer", function(remainingHealth)
+    print("[Rippah Spawner] Player damaged! Remaining Health: " .. tostring(remainingHealth))
+end)
+-- Triggers right before the entity is deleted from workspace
+Entity:SetCallback("OnDespawning", function()
+    print("[Rippah Spawner] Entity has reached the final room. Despawning...")
+end)
+-- Triggers when the entity is completely cleaned up
+Entity:SetCallback("OnDespawned", function()
+    print("[Rippah Spawner] Clean up complete.")
+end)
+-- Optional: Custom Crucifix Overwrite (Replace default crucifixion animations with your own script)
+--[[
+Entity:SetCallback("CrucifixionOverwrite", function()
+    print("[Rippah Spawner] Custom crucifixion logic triggered!")
+    -- Your custom script here
+end)
+]]
+-- ==============================================================================
+-- 5. Run the Spawner Sequence
+-- ==============================================================================
+Entity:Run()
